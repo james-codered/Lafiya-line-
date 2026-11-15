@@ -326,7 +326,7 @@ app.post('/register', async (req, res) => {
         if (firstAppointmentError) throw firstAppointmentError;
 
         // Save next appointment
-        const { error: nextAppointmentError } =
+        const { error: nextAppointmentError } = 
             await supabase
                 .from('appointment')
                 .insert({
