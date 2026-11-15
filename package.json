@@ -1,11 +1,12 @@
 {
-"name": "lafiya-line",
-"version": "1.0.0",
-"scripts": {
-"start": "node server.js"
-},
-"dependencies": {
-"express": "^4.19.2",
-"@supabase/supabase-js": "^2.57.0"
-}
+  "name": "lafiya-line",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@supabase/supabase-js": "^2.57.0",
+    "twilio": "^5.10.0"
+  }
 }
