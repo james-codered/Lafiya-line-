@@ -156,8 +156,7 @@ app.post('/make-call', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Twilio call error:', error.message);
-
+        console.error('Twilio call error:', error);
         return res.status(500).json({
             success: false,
             error: 'Unable to initiate phone call.'
