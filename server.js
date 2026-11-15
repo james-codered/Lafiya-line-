@@ -1,4 +1,4 @@
-const express = require('express');
+Serve recordingsconst express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const twilio = require('twilio');
 
@@ -164,6 +164,40 @@ app.post('/make-call', async (req, res) => {
     }
 });
 
+// Serve recordings through Render with the MIME type Twilio expects for MP3.
+app.get('/audio/:filename', async (req, res) => {
+    const filename = req.params.filename;
+
+    if (!/^call[12]_(?:en|ha)\.mp3$/.test(filename)) {
+        return res.sendStatus(404);
+    }
+
+    try {
+        const upstream = await fetch(
+            AUDIO_BASE_URL + '/' + filename,
+            { signal: AbortSignal.timeout(15000) }
+        );
+
+        if (!upstream.ok) {
+            console.error('Audio upstream returned HTTP ' + upstream.status);
+            return res.status(502).send('Audio unavailable.');
+        }
+
+        const audio = Buffer.from(await upstream.arrayBuffer());
+        if (audio.length === 0) {
+            return res.status(502).send('Audio unavailable.');
+        }
+
+        res.set('Content-Type', 'audio/mpeg');
+        res.set('Content-Length', String(audio.length));
+        res.set('Cache-Control', 'public, max-age=3600');
+        return res.status(200).send(audio);
+    } catch (error) {
+        console.error('Audio proxy error:', error.message);
+        return res.status(502).send('Audio unavailable.');
+    }
+});
+
 // Twilio voice webhook: play the correct recording
 app.post('/voice', (req, res) => {
     const language = req.query.language;
@@ -181,9 +215,7 @@ app.post('/voice', (req, res) => {
 
     const twiml = new twilio.twiml.VoiceResponse();
 
-    twiml.play(
-        `${AUDIO_BASE_URL}/${recording}`
-    );
+    twiml.play(BASE_URL + '/audio/' + recording);
 
     res.type('text/xml');
     res.status(200).send(twiml.toString());
