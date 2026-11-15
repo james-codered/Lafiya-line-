@@ -1,4 +1,4 @@
-// Serve recordings
+// Lafiya Line Backend
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const twilio = require('twilio');
@@ -8,14 +8,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Allow requests from the Lafiya Line frontend
+// CORS
+const ALLOWED_ORIGIN = 'https://elijahamosdogo-afk.github.io';
+
 app.use((req, res, next) => {
-    res.header(
-        'Access-Control-Allow-Origin',
-        'https://elijahamosdogo-afk.github.io'
-    );
+    res.header('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+    res.header('Vary', 'Origin');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
@@ -24,9 +24,10 @@ app.use((req, res, next) => {
     next();
 });
 
-// Environment configuration
+// Environment variables
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
@@ -38,36 +39,37 @@ const BASE_URL = 'https://lafiya-line-voice.onrender.com';
 const AUDIO_BASE_URL =
     'https://elijahamosdogo-afk.github.io/Lafiya-line-/audio';
 
-// Validate required environment variables
-if (
-    !SUPABASE_URL ||
-    !SUPABASE_SECRET_KEY ||
-    !TWILIO_ACCOUNT_SID ||
-    !TWILIO_AUTH_TOKEN ||
-    !TWILIO_PHONE_NUMBER
-) {
-    console.error('Missing required environment variables.');
+const DEMO_FACILITY_ID =
+    '1a6ecdd8-de26-44f0-8ffa-3b240485003f';
+
+// Supabase is required
+if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    console.error('Missing Supabase environment variables.');
     process.exit(1);
 }
 
-// Initialize Supabase
 const supabase = createClient(
     SUPABASE_URL,
     SUPABASE_SECRET_KEY
 );
 
-// Initialize Twilio
-const client = twilio(
-    TWILIO_ACCOUNT_SID,
-    TWILIO_AUTH_TOKEN
+// Twilio is optional until configured
+const twilioConfigured = Boolean(
+    TWILIO_ACCOUNT_SID &&
+    TWILIO_AUTH_TOKEN &&
+    TWILIO_PHONE_NUMBER
 );
 
-// Root endpoint
+const client = twilioConfigured
+    ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    : null;
+
+// ROOT
 app.get('/', (req, res) => {
-    res.status(200).send('Lafiya Line Voice Server is running!');
+    res.send('Lafiya Line Voice Server is running!');
 });
 
-// Database connection check
+// DATABASE CHECK
 app.get('/db-check', async (req, res) => {
     try {
         const { error } = await supabase
@@ -75,19 +77,9 @@ app.get('/db-check', async (req, res) => {
             .select('id')
             .limit(1);
 
-        if (error) {
-            console.error(
-                'Supabase connection check failed:',
-                error.message
-            );
+        if (error) throw error;
 
-            return res.status(503).json({
-                connected: false,
-                error: 'Database check failed'
-            });
-        }
-
-        return res.status(200).json({
+        res.json({
             connected: true,
             message: 'Supabase database is responding'
         });
@@ -95,146 +87,18 @@ app.get('/db-check', async (req, res) => {
     } catch (error) {
         console.error('Database error:', error.message);
 
-        return res.status(500).json({
+        res.status(503).json({
             connected: false,
-            error: 'Internal server error'
+            error: 'Database check failed'
         });
     }
 });
 
-// Initiate an outbound phone call
-app.post('/make-call', async (req, res) => {
-    try {
-        const { to, language, callType } = req.body;
-
-        if (!to || !language || !callType) {
-            return res.status(400).json({
-                error: 'Phone number, language and call type are required.'
-            });
-        }
-
-        // Validate phone number format
-        if (!/^\+[1-9]\d{7,14}$/.test(to)) {
-            return res.status(400).json({
-                error: 'Phone number must use international format, e.g. +234...'
-            });
-        }
-
-        // Select supported language
-        const lang = language === 'English' ? 'en' : 'ha';
-
-        if (!['English', 'Hausa', 'Kanuri'].includes(language)) {
-            return res.status(400).json({
-                error: 'Unsupported language.'
-            });
-        }
-
-        // Validate reminder type
-        if (![1, 2].includes(Number(callType))) {
-            return res.status(400).json({
-                error: 'Call type must be 1 or 2.'
-            });
-        }
-
-        // Pass call details to Twilio's voice webhook
-        const voiceUrl = new URL(`${BASE_URL}/voice`);
-
-        voiceUrl.searchParams.set('language', lang);
-        voiceUrl.searchParams.set('callType', Number(callType));
-
-        const call = await client.calls.create({
-            to,
-            from: TWILIO_PHONE_NUMBER,
-            url: voiceUrl.toString(),
-            method: 'POST'
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: 'Call initiated successfully.',
-            callSid: call.sid,
-            status: call.status
-        });
-
-    } catch (error) {
-        console.error('Twilio call error:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Unable to initiate phone call.'
-        });
-    }
-});
-
-// Serve recordings through Render with the MIME type Twilio expects for MP3.
-app.get('/audio/:filename', async (req, res) => {
-    const filename = req.params.filename;
-
-    if (!/^call[12]_(?:en|ha)\.mp3$/.test(filename)) {
-        return res.sendStatus(404);
-    }
-
-    try {
-        const upstream = await fetch(
-            AUDIO_BASE_URL + '/' + filename,
-            { signal: AbortSignal.timeout(15000) }
-        );
-
-        if (!upstream.ok) {
-            console.error('Audio upstream returned HTTP ' + upstream.status);
-            return res.status(502).send('Audio unavailable.');
-        }
-
-        const audio = Buffer.from(await upstream.arrayBuffer());
-        if (audio.length === 0) {
-            return res.status(502).send('Audio unavailable.');
-        }
-
-        res.set('Content-Type', 'audio/mpeg');
-        res.set('Content-Length', String(audio.length));
-        res.set('Cache-Control', 'public, max-age=3600');
-        return res.status(200).send(audio);
-    } catch (error) {
-        console.error('Audio proxy error:', error.message);
-        return res.status(502).send('Audio unavailable.');
-    }
-});
-
-// Twilio voice webhook: play the correct recording
-app.post('/voice', (req, res) => {
-    const language = req.query.language;
-    const callType = Number(req.query.callType);
-
-    const lang = language === 'en' ? 'en' : 'ha';
-
-    if (!['en', 'ha'].includes(language) ||
-        ![1, 2].includes(callType)) {
-        return res.status(400).send('Invalid voice settings.');
-    }
-
-    const recording =
-        `call${callType}_${lang}.mp3`;
-
-    const twiml = new twilio.twiml.VoiceResponse();
-
-    twiml.play(BASE_URL + '/audio/' + recording);
-
-    res.type('text/xml');
-    res.status(200).send(twiml.toString());
-});
-
-// Handle unknown routes
-app.use((req, res) => {
-    res.status(404).json({
-        error: 'Route not found'
-    });
-});
-
-// Start server
-// LAFIYA LINE: SAVE REGISTRATION TO SUPABASE
-
-const DEMO_FACILITY_ID = '1a6ecdd8-de26-44f0-8ffa-3b240485003f';
-
+// CAREGIVER REGISTRATION
 app.post('/register', async (req, res) => {
+    let caregiverId = null;
+    let childId = null;
+
     try {
         const {
             phone,
@@ -244,13 +108,15 @@ app.post('/register', async (req, res) => {
             ageUnit,
             dose,
             nextDoseDate
-        } = req.body;
+        } = req.body || {};
 
-        // Validate required information
+        // Validate required fields
         if (
             !phone ||
             !language ||
-            !age ||
+            age === undefined ||
+            age === null ||
+            age === '' ||
             !dose ||
             !nextDoseDate
         ) {
@@ -260,9 +126,16 @@ app.post('/register', async (req, res) => {
             });
         }
 
+        if (typeof phone !== 'string') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid phone number'
+            });
+        }
+
         const cleanPhone = phone.replace(/\s/g, '');
 
-        if (!/^(0|\+234)[789]\d{9}$/.test(cleanPhone)) {
+        if (!/^(0[789]\d{9}|\+234[789]\d{9})$/.test(cleanPhone)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid Nigerian phone number'
@@ -277,11 +150,13 @@ app.post('/register', async (req, res) => {
         }
 
         const numericAge = Number(age);
+        const unit = ageUnit || 'months';
 
         if (
             !Number.isFinite(numericAge) ||
             numericAge < 0 ||
-            numericAge > (ageUnit === 'weeks' ? 104 : 59)
+            !['weeks', 'months'].includes(unit) ||
+            numericAge > (unit === 'weeks' ? 104 : 59)
         ) {
             return res.status(400).json({
                 success: false,
@@ -289,15 +164,27 @@ app.post('/register', async (req, res) => {
             });
         }
 
+        if (
+            typeof nextDoseDate !== 'string' ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(nextDoseDate) ||
+            Number.isNaN(Date.parse(nextDoseDate + 'T00:00:00'))
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid next appointment date'
+            });
+        }
+
         // Calculate date of birth
         const days = Math.round(
-            numericAge * (ageUnit === 'weeks' ? 7 : 30.4)
+            numericAge * (unit === 'weeks' ? 7 : 30.4)
         );
 
         const dob = new Date();
         dob.setDate(dob.getDate() - days);
 
         const dateOfBirth = dob.toISOString().slice(0, 10);
+        const today = new Date().toISOString().slice(0, 10);
 
         // Save caregiver
         const { data: caregiver, error: caregiverError } =
@@ -311,10 +198,12 @@ app.post('/register', async (req, res) => {
                     consent: true,
                     referred_by: referredBy || null
                 })
-                .select()
+                .select('id')
                 .single();
 
         if (caregiverError) throw caregiverError;
+
+        caregiverId = caregiver.id;
 
         // Generate child reference
         const childReference =
@@ -325,63 +214,76 @@ app.post('/register', async (req, res) => {
             await supabase
                 .from('children')
                 .insert({
-                    caregiver_id: caregiver.id,
+                    caregiver_id: caregiverId,
                     child_name: childReference,
                     date_of_birth: dateOfBirth,
                     facility_id: DEMO_FACILITY_ID
                 })
-                .select()
+                .select('id, child_name')
                 .single();
 
-        if (childError) {
-            await supabase
-                .from('caregivers')
-                .delete()
-                .eq('id', caregiver.id);
+        if (childError) throw childError;
 
-            throw childError;
-        }
+        childId = child.id;
 
-        // Save dose given today
-        const { error: firstAppointmentError } =
+        // Save appointments
+        const { error: appointmentError } =
             await supabase
                 .from('appointment')
-                .insert({
-                    child_id: child.id,
-                    vaccine: dose + ' dose',
-                    dose_number: 1,
-                    appointment_date:
-                        new Date().toISOString().slice(0, 10),
-                    status: 'attended',
-                    returned: true
-                });
+                .insert([
+                    {
+                        child_id: childId,
+                        vaccine: dose + ' dose',
+                        dose_number: 1,
+                        appointment_date: today,
+                        status: 'attended',
+                        returned: true
+                    },
+                    {
+                        child_id: childId,
+                        vaccine: 'Next dose due',
+                        dose_number: 2,
+                        appointment_date: nextDoseDate,
+                        status: 'scheduled',
+                        returned: false
+                    }
+                ]);
 
-        if (firstAppointmentError) throw firstAppointmentError;
+        if (appointmentError) throw appointmentError;
 
-        // Save next appointment
-        const { error: nextAppointmentError } = 
-            await supabase
-                .from('appointment')
-                .insert({
-                    child_id: child.id,
-                    vaccine: 'Next dose due',
-                    dose_number: 2,
-                    appointment_date: nextDoseDate,
-                    status: 'scheduled',
-                    returned: false
-                });
-
-        if (nextAppointmentError) throw nextAppointmentError;
+        console.log('Registration saved:', caregiverId, childId);
 
         return res.status(201).json({
             success: true,
             message: 'Registration saved successfully',
-            caregiver,
-            child
+            caregiver: { id: caregiverId },
+            child: {
+                id: childId,
+                child_name: child.child_name
+            }
         });
 
     } catch (error) {
-        console.error('Registration error:', error);
+        console.error('Registration error:', {
+            message: error.message,
+            code: error.code,
+            details: error.details
+        });
+
+        // Clean up incomplete registrations
+        if (childId) {
+            await supabase
+                .from('children')
+                .delete()
+                .eq('id', childId);
+        }
+
+        if (caregiverId) {
+            await supabase
+                .from('caregivers')
+                .delete()
+                .eq('id', caregiverId);
+        }
 
         return res.status(500).json({
             success: false,
@@ -390,8 +292,140 @@ app.post('/register', async (req, res) => {
         });
     }
 });
+
+// INITIATE PHONE CALL
+app.post('/make-call', async (req, res) => {
+    if (!twilioConfigured || !client) {
+        return res.status(503).json({
+            success: false,
+            error: 'Phone calling is not configured yet.'
+        });
+    }
+
+    try {
+        const { to, language, callType } = req.body || {};
+
+        if (!to || !language || !callType) {
+            return res.status(400).json({
+                error: 'Phone number, language and call type are required.'
+            });
+        }
+
+        if (!/^\+[1-9]\d{7,14}$/.test(to)) {
+            return res.status(400).json({
+                error: 'Phone number must use international format.'
+            });
+        }
+
+        if (!['English', 'Hausa', 'Kanuri'].includes(language)) {
+            return res.status(400).json({
+                error: 'Unsupported language.'
+            });
+        }
+
+        if (![1, 2].includes(Number(callType))) {
+            return res.status(400).json({
+                error: 'Call type must be 1 or 2.'
+            });
+        }
+
+        const lang = language === 'English' ? 'en' : 'ha';
+
+        const voiceUrl = new URL(`${BASE_URL}/voice`);
+
+        voiceUrl.searchParams.set('language', lang);
+        voiceUrl.searchParams.set('callType', Number(callType));
+
+        const call = await client.calls.create({
+            to,
+            from: TWILIO_PHONE_NUMBER,
+            url: voiceUrl.toString(),
+            method: 'POST'
+        });
+
+        res.json({
+            success: true,
+            message: 'Call initiated successfully.',
+            callSid: call.sid,
+            status: call.status
+        });
+
+    } catch (error) {
+        console.error('Twilio error:', error.message);
+
+        res.status(500).json({
+            success: false,
+            error: 'Unable to initiate phone call.'
+        });
+    }
+});
+
+// AUDIO PROXY
+app.get('/audio/:filename', async (req, res) => {
+    const filename = req.params.filename;
+
+    if (!/^call[12]_(?:en|ha)\.mp3$/.test(filename)) {
+        return res.sendStatus(404);
+    }
+
+    try {
+        const upstream = await fetch(
+            AUDIO_BASE_URL + '/' + filename,
+            { signal: AbortSignal.timeout(15000) }
+        );
+
+        if (!upstream.ok) {
+            return res.status(502).send('Audio unavailable.');
+        }
+
+        const audio = Buffer.from(await upstream.arrayBuffer());
+
+        if (!audio.length) {
+            return res.status(502).send('Audio unavailable.');
+        }
+
+        res.set('Content-Type', 'audio/mpeg');
+        res.set('Content-Length', String(audio.length));
+        res.set('Cache-Control', 'public, max-age=3600');
+
+        return res.send(audio);
+
+    } catch (error) {
+        console.error('Audio proxy error:', error.message);
+        res.status(502).send('Audio unavailable.');
+    }
+});
+
+// TWILIO VOICE WEBHOOK
+app.post('/voice', (req, res) => {
+    const language = req.query.language;
+    const callType = Number(req.query.callType);
+
+    if (
+        !['en', 'ha'].includes(language) ||
+        ![1, 2].includes(callType)
+    ) {
+        return res.status(400).send('Invalid voice settings.');
+    }
+
+    const recording = `call${callType}_${language}.mp3`;
+
+    const twiml = new twilio.twiml.VoiceResponse();
+
+    twiml.play(BASE_URL + '/audio/' + recording);
+
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+// 404 HANDLER MUST BE LAST
+app.use((req, res) => {
+    res.status(404).json({
+        error: 'Route not found'
+    });
+});
+
+// START SERVER
 app.listen(PORT, () => {
-    console.log(
-        `Lafiya Line server running on port ${PORT}`
-    );
+    console.log(`Lafiya Line server running on port ${PORT}`);
 });
