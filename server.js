@@ -197,6 +197,166 @@ app.use((req, res) => {
 });
 
 // Start server
+// LAFIYA LINE: SAVE REGISTRATION TO SUPABASE
+
+const DEMO_FACILITY_ID = '1a6ecdd8-de26-44f0-8ffa-3b240485003f';
+
+app.post('/register', async (req, res) => {
+    try {
+        const {
+            phone,
+            language,
+            referredBy,
+            age,
+            ageUnit,
+            dose,
+            nextDoseDate
+        } = req.body;
+
+        // Validate required information
+        if (
+            !phone ||
+            !language ||
+            !age ||
+            !dose ||
+            !nextDoseDate
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing registration information'
+            });
+        }
+
+        const cleanPhone = phone.replace(/\s/g, '');
+
+        if (!/^(0|\+234)[789]\d{9}$/.test(cleanPhone)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Nigerian phone number'
+            });
+        }
+
+        if (!['Hausa', 'Kanuri', 'English'].includes(language)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid language'
+            });
+        }
+
+        const numericAge = Number(age);
+
+        if (
+            !Number.isFinite(numericAge) ||
+            numericAge < 0 ||
+            numericAge > (ageUnit === 'weeks' ? 104 : 59)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid child age'
+            });
+        }
+
+        // Calculate date of birth
+        const days = Math.round(
+            numericAge * (ageUnit === 'weeks' ? 7 : 30.4)
+        );
+
+        const dob = new Date();
+        dob.setDate(dob.getDate() - days);
+
+        const dateOfBirth = dob.toISOString().slice(0, 10);
+
+        // Save caregiver
+        const { data: caregiver, error: caregiverError } =
+            await supabase
+                .from('caregivers')
+                .insert({
+                    name: 'Mother …' + cleanPhone.slice(-4),
+                    phone: cleanPhone,
+                    language,
+                    facility_id: DEMO_FACILITY_ID,
+                    consent: true,
+                    referred_by: referredBy || null
+                })
+                .select()
+                .single();
+
+        if (caregiverError) throw caregiverError;
+
+        // Generate child reference
+        const childReference =
+            'Baby LL-' + Date.now().toString().slice(-6);
+
+        // Save child
+        const { data: child, error: childError } =
+            await supabase
+                .from('children')
+                .insert({
+                    caregiver_id: caregiver.id,
+                    child_name: childReference,
+                    date_of_birth: dateOfBirth,
+                    facility_id: DEMO_FACILITY_ID
+                })
+                .select()
+                .single();
+
+        if (childError) {
+            await supabase
+                .from('caregivers')
+                .delete()
+                .eq('id', caregiver.id);
+
+            throw childError;
+        }
+
+        // Save dose given today
+        const { error: firstAppointmentError } =
+            await supabase
+                .from('appointment')
+                .insert({
+                    child_id: child.id,
+                    vaccine: dose + ' dose',
+                    dose_number: 1,
+                    appointment_date:
+                        new Date().toISOString().slice(0, 10),
+                    status: 'attended',
+                    returned: true
+                });
+
+        if (firstAppointmentError) throw firstAppointmentError;
+
+        // Save next appointment
+        const { error: nextAppointmentError } =
+            await supabase
+                .from('appointment')
+                .insert({
+                    child_id: child.id,
+                    vaccine: 'Next dose due',
+                    dose_number: 2,
+                    appointment_date: nextDoseDate,
+                    status: 'scheduled',
+                    returned: false
+                });
+
+        if (nextAppointmentError) throw nextAppointmentError;
+
+        return res.status(201).json({
+            success: true,
+            message: 'Registration saved successfully',
+            caregiver,
+            child
+        });
+
+    } catch (error) {
+        console.error('Registration error:', error);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Could not save registration',
+            error: error.message
+        });
+    }
+});
 app.listen(PORT, () => {
     console.log(
         `Lafiya Line server running on port ${PORT}`
