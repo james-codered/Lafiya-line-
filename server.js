@@ -1,4 +1,4 @@
-'use strict';
+'use strict'; 
 // Lafiya Line API.
 // The Supabase secret key stays on this server only; the browser never receives it.
 // Requires Node 18+ (global fetch, AbortSignal.timeout).
