@@ -99,7 +99,7 @@ language plpgsql
 set search_path = ''
 as $
 begin
-  if new.schedule_complete and new.vaccine_type <> '15 months - Nine-month' then
+  if new.schedule_complete and new.vaccine_type is distinct from '15 months - Nine-month' then
     raise exception 'only the administered 15-month final dose can complete the schedule';
   end if;
   return new;
