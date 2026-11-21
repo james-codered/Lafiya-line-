@@ -307,4 +307,6 @@ $$;
 revoke all on function public.create_aftercare_vaccination(uuid,text,timestamptz,text,timestamptz,boolean,timestamptz,uuid,text,boolean,jsonb) from public, anon, authenticated;
 grant execute on function public.create_aftercare_vaccination(uuid,text,timestamptz,text,timestamptz,boolean,timestamptz,uuid,text,boolean,jsonb) to service_role;
 
+notify pgrst, 'reload schema';
+
 commit;
