@@ -66,3 +66,45 @@ Additional findings and corrections:
 7. The repository has no automated test script; `package.json` currently exposes only `npm start`. SQL has not been executed against a test database, so these are static-review results only.
 
 The migration remains unapplied. Production database, Render services, and Twilio configuration were not changed. A paid Supabase test branch is still required for runtime validation.
+
+
+## Frontend-to-backend integration review — 21 November 2026
+
+Read-only review of Elijah's frontend repository `elijahamosdogo-afk/Lafiya-line-` (default branch `main`) against this backend's `server.js` API routes.
+
+### Confirmed frontend state
+
+- The frontend is a single-page HTML/JavaScript application in `index.html`.
+- Its application records are loaded and saved through `localStorage` under `lafiya_v8`; no API `fetch()` calls were found.
+- Login uses hard-coded demo accounts and passwords in the browser. The “forgot password” action is simulated.
+- Enrolment, appointments, call records, and callbacks are generated and updated locally. The UI labels itself as a prototype/demo.
+- The frontend currently derives a child DOB from reported age using an approximate day conversion. This must not be carried into live integration: only a caregiver-confirmed actual DOB may be submitted as DOB; otherwise leave DOB unknown and retain reported age separately.
+- The frontend enrolment flow does not currently collect a caregiver's full name, while the backend `POST /api/register` requires `fullName`.
+
+### Backend API available for integration
+
+- `POST /api/auth/login` — email/password sign-in; returns access token and user profile.
+- `GET /api/auth/me` — validates the current token and returns the staff profile.
+- `GET /api/bootstrap` — facility-scoped dashboard snapshot (facilities, caregivers, children, appointments, calls, attempts, callbacks, profiles).
+- `POST /api/register` — new caregiver/child enrolment and initial dose/call schedule.
+- `POST /api/vaccinations` — records a subsequent administered dose.
+- `PATCH /api/caregivers/:id` — caregiver updates and consent lifecycle actions.
+- `POST /api/callbacks` and `PATCH /api/callbacks/:id` — create and manage callback tasks.
+- Additional staff, facility, call-initiation, and appointment routes exist; appointment edits intentionally return HTTP 501 because vaccination events must not be rewritten.
+
+### Integration blockers and required design
+
+1. Replace browser demo credentials with backend email/password authentication. Keep the access token in memory; never store the Supabase service key in the browser.
+2. Add the caregiver's full name to enrolment. Do not manufacture it from the phone number.
+3. Remove approximate DOB generation. Collect actual DOB only when known and confirmed; otherwise preserve age value/unit without asserting a DOB.
+4. Replace local application record persistence with authenticated API requests and bootstrap responses. Retain local storage only for non-sensitive preferences such as theme and optional remembered email.
+5. Map frontend roles and field names to backend profile and record fields; backend remains authoritative for facility scoping and permissions.
+6. Replace simulated call/appointment/callback outcomes with backend responses. The UI must show calling readiness as paused and must not trigger real calls during integration testing.
+7. Add loading, validation, expired-session, permission-denied, and API-error states before enabling live data.
+
+### Branch/access result and next implementation step
+
+- Frontend default branch `main` and an existing `elijahamosdogo-afk-patch-1` branch were visible during read-only inspection.
+- Creating `integration/live-api-connection-2026-11` failed with GitHub HTTP 403: `Resource not accessible by integration`. No frontend file or branch was changed.
+- Next step: obtain GitHub write access for the connected integration, or have the frontend repository owner create/push the integration branch. Then implement authentication first, followed by bootstrap/data mapping and the enrolment flow.
+- No PR, frontend commit, merge, Render deployment, database migration, or outbound call was made as part of this review.
