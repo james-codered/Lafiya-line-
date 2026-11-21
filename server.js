@@ -32,7 +32,7 @@ const PORT = Number(env.PORT) || 3000;
 // One attempt per call unless an administrator deliberately raises this (max 3).
 const MAX_ATTEMPTS = clamp(parseInt(env.CALL_MAX_ATTEMPTS, 10) || 1, 1, 3);
 const RETRY_DELAY_MINUTES = clamp(parseInt(env.CALL_RETRY_DELAY_MINUTES, 10) || 60, 5, 1440);
-const SCHEMA_VERSION = 'lafiya-2026-11-v1'; // must match lafiya_schema_version() in migration 002
+const SCHEMA_VERSION = 'lafiya-2026-11-v1'; // must match lafiya_schema_version() in the live-schema compatibility migration
 
 const normalizeOrigin = value => { try { return new URL(String(value).trim()).origin; } catch (_e) { return null; } };
 const FRONTEND_ORIGINS = String(env.FRONTEND_ORIGIN || 'https://elijahamosdogo-afk.github.io')
@@ -476,7 +476,7 @@ app.post('/api/register', requireAuth, staff(...STAFF_ROLES), route(async (req, 
       p_facility_id: facilityId, p_full_name: fullName, p_phone: phone, p_language_code: languageCode, p_referred_by: referredBy || null,
       p_consent_given: b.consentGiven === true, p_consent_version: CONSENT_VERSION,
       p_age_value: age, p_age_unit: b.ageUnit, p_enrolled_at: today,
-      p_estimated_dob: addDaysIso(today, -Math.round(age * (b.ageUnit === 'weeks' ? 7 : 30.4375))),
+      // Never infer a child's date of birth from reported age.
       p_vaccine_type: stage[0], p_next_dose_stage: isFinalDose ? null : stage[1],
       p_next_dose_due_at: isFinalDose ? null : lagosNoonIso(b.nextDoseDate),
       p_schedule_complete: isFinalDose, p_recorded_by: p.id, p_vaccinated_at: now.toISOString(),
