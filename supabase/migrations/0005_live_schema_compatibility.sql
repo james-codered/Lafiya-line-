@@ -75,6 +75,43 @@ alter table public.appointment
   add column if not exists schedule_completed_at timestamptz,
   add column if not exists recorded_by uuid;
 
+-- Enforce one recorded instance of each new vaccine stage per child. Legacy rows
+-- with vaccine_type NULL remain untouched and do not conflict with this constraint.
+do $
+begin
+  if exists (
+    select 1 from public.appointment
+    where vaccine_type is not null
+    group by child_id, vaccine_type
+    having count(*) > 1
+  ) then
+    raise exception 'duplicate child vaccine stages exist; review them before adding the unique index';
+  end if;
+end;
+$;
+
+create unique index if not exists appointment_child_stage_once_uq
+  on public.appointment(child_id, vaccine_type);
+
+create or replace function public.validate_completed_vaccination_schedule()
+returns trigger
+language plpgsql
+set search_path = ''
+as $
+begin
+  if new.schedule_complete and new.vaccine_type <> '15 months - Nine-month' then
+    raise exception 'only the administered 15-month final dose can complete the schedule';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists appointment_completed_schedule_guard on public.appointment;
+create trigger appointment_completed_schedule_guard
+before insert or update of schedule_complete, vaccine_type
+on public.appointment
+for each row execute function public.validate_completed_vaccination_schedule();
+
 -- Calls: new API-created calls are scheduled explicitly and carry their follow-up interval.
 alter table public.calls
   add column if not exists follow_up_hours integer,
