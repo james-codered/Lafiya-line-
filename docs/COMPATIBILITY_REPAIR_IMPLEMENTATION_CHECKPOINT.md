@@ -52,3 +52,17 @@ Branch: fix/live-schema-compatibility-2026-11
 6. Review the final diff before PR/merge. Production deployment requires separate explicit release authorization.
 
 This checkpoint is a development implementation, not a claim that the database is already compatible or that the migration has passed execution tests.
+
+## Follow-up static review — 21 November 2026
+
+Additional findings and corrections:
+
+1. Corrected the legacy consent backfill. The new `consent_given` column defaults to false, so a plain `coalesce(consent_given, consent, false)` would mask historical true consent. The migration now copies legacy `consent` only when no newer consent lifecycle metadata exists; it does not invent timestamps or consent versions.
+2. Enabled RLS on the new `call_attempts` table, explicitly revoked direct access from `public`, `anon`, and `authenticated`, and granted table access to `service_role`.
+3. Added explicit required-field and null validation to the registration and vaccination RPCs, including supported language validation when follow-up calls are requested.
+4. Added a duplicate child/vaccine-stage preflight and unique index for new vaccine records. Legacy appointment rows with null `vaccine_type` are preserved.
+5. Added a database trigger preventing a schedule from being marked complete unless the recorded vaccine stage is the final 15-month dose. The check also rejects a null vaccine stage.
+6. Re-ran static text checks: consent backfill, call-attempt RLS/revokes, RPC null checks, bigint appointment ID, PostgREST schema reload, and absence of destructive table/column/data statements all passed.
+7. The repository has no automated test script; `package.json` currently exposes only `npm start`. SQL has not been executed against a test database, so these are static-review results only.
+
+The migration remains unapplied. Production database, Render services, and Twilio configuration were not changed. A paid Supabase test branch is still required for runtime validation.
