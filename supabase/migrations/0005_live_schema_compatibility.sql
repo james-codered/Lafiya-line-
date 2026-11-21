@@ -217,7 +217,7 @@ begin
     loop
       v_hours := (v_item ->> 'hours')::integer;
       v_at := (v_item ->> 'at')::timestamptz;
-      if v_hours not in (24, 72) or v_at is null then
+      if v_hours is null or v_hours not in (24, 72) or v_at is null then
         raise exception 'INVALID_CALL_SCHEDULE: each item needs 24/72 hours and a timestamp';
       end if;
       insert into public.calls (appointment_id, follow_up_hours, scheduled_at, language_code, status)
@@ -286,7 +286,7 @@ begin
     loop
       v_hours := (v_item ->> 'hours')::integer;
       v_at := (v_item ->> 'at')::timestamptz;
-      if v_hours not in (24, 72) or v_at is null then
+      if v_hours is null or v_hours not in (24, 72) or v_at is null then
         raise exception 'INVALID_CALL_SCHEDULE: each item needs 24/72 hours and a timestamp';
       end if;
       insert into public.calls (appointment_id, follow_up_hours, scheduled_at, language_code, status)
