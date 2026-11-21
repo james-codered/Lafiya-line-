@@ -173,10 +173,10 @@ begin
   if p_consent_given is null then
     raise exception 'CONSENT_REQUIRED: consent state must be explicit';
   end if;
-  if p_age_value is null or p_age_value < 0 or p_age_unit not in ('weeks', 'months') then
+  if p_age_value is null or p_age_value < 0 or p_age_unit is null or p_age_unit not in ('weeks', 'months') then
     raise exception 'INVALID_AGE: reported age is invalid';
   end if;
-  if p_language_code not in ('en', 'ha', 'kr') then
+  if p_language_code is null or p_language_code not in ('en', 'ha', 'kr') then
     raise exception 'INVALID_LANGUAGE: unsupported language code';
   end if;
 
@@ -267,7 +267,7 @@ declare
   v_hours integer;
   v_at timestamptz;
 begin
-  if not exists (select 1 from public.children where id = p_child_id) then
+  if p_child_id is null or not exists (select 1 from public.children where id = p_child_id) then
     raise exception 'CHILD_NOT_FOUND: child does not exist';
   end if;
   insert into public.appointment (
