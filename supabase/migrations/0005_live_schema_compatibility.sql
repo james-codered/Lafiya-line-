@@ -13,6 +13,9 @@ alter table public.facilities
 alter table public.profiles
   add column if not exists is_active boolean not null default true;
 
+create unique index if not exists facilities_code_compat_uq
+  on public.facilities(code) where code is not null;
+
 -- Caregivers: retain name/language/consent as legacy source columns.
 alter table public.caregivers
   add column if not exists full_name text,
