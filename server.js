@@ -286,7 +286,7 @@ const SCHEMA_PROBES = {
   facilities: 'id,name,code,address,phone,is_active',
   profiles: 'id,facility_id,role,full_name,phone,is_active,created_at',
   caregivers: 'id,facility_id,full_name,phone,preferred_language,consent_given,consent_given_at,consent_withdrawn_at,consent_version,referred_by,created_at',
-  children: 'id,caregiver_id,facility_id,age_value,age_unit,enrolled_at,estimated_date_of_birth,is_active',
+  children: 'id,caregiver_id,facility_id,child_name,date_of_birth,age_value,age_unit,enrolled_at,is_active',
   appointment: 'id,child_id,vaccine_type,vaccinated_at,next_dose_stage,next_dose_due_at,schedule_complete,schedule_completed_at,recorded_by',
   calls: 'id,appointment_id,follow_up_hours,scheduled_at,language_code,status,completed_at,retention_expires_at',
   call_attempts: 'id,call_id,attempt_number,status,twilio_call_sid,provider_status,keypad_sequence,response,outcome,started_at,ended_at,duration_seconds,retention_expires_at',
@@ -300,7 +300,7 @@ async function schemaProblems() {
     if (error) problems.push({ table, code: error.code || null, message: String(error.message || '').slice(0, 200) });
   }
   const { data, error } = await supabase.rpc('lafiya_schema_version');
-  if (error) problems.push({ table: 'functions', code: error.code || null, message: 'Migration 002 is not applied (lafiya_schema_version missing).' });
+  if (error) problems.push({ table: 'functions', code: error.code || null, message: 'Live-schema compatibility migration is not applied (lafiya_schema_version missing).' });
   else if (data !== SCHEMA_VERSION) problems.push({ table: 'functions', code: null, message: `Database schema version is ${data}; the server expects ${SCHEMA_VERSION}.` });
   return problems;
 }
