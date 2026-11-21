@@ -39,10 +39,23 @@ set full_name = coalesce(full_name, name),
         else null
       end
     ),
-    consent_given = coalesce(consent_given, consent, false)
+    consent_given = case
+      -- The newly-added column defaults to false. Copy the legacy consent value
+      -- only while no newer consent lifecycle metadata exists.
+      when consent_given_at is null
+       and consent_withdrawn_at is null
+       and consent_version is null
+      then coalesce(consent, false)
+      else consent_given
+    end
 where full_name is null
    or preferred_language is null
-   or consent_given is distinct from coalesce(consent, false);
+   or (
+     consent_given_at is null
+     and consent_withdrawn_at is null
+     and consent_version is null
+     and consent_given is distinct from coalesce(consent, false)
+   );
 
 -- Children: age is retained as reported; date_of_birth remains an actual recorded DOB only.
 alter table public.children
@@ -92,6 +105,12 @@ create table if not exists public.call_attempts (
 
 create index if not exists call_attempts_call_id_idx on public.call_attempts(call_id);
 create index if not exists call_attempts_status_started_at_idx on public.call_attempts(status, started_at);
+
+-- Keep call-attempt data inaccessible to direct client roles; the backend service role
+-- is the only application actor that should read or write provider call metadata.
+alter table public.call_attempts enable row level security;
+revoke all on table public.call_attempts from public, anon, authenticated;
+grant all on table public.call_attempts to service_role;
 
 -- Callbacks: preserve reason, notes, danger_signs and assigned_to text for backward compatibility.
 alter table public.callbacks
@@ -167,6 +186,10 @@ declare
   v_hours integer;
   v_at timestamptz;
 begin
+  if p_schedule_complete is null or p_enrolled_at is null or p_vaccinated_at is null
+     or p_vaccine_type is null or length(btrim(p_vaccine_type)) = 0 then
+    raise exception 'INVALID_VACCINATION: vaccination details are incomplete';
+  end if;
   if p_facility_id is null or p_full_name is null or length(btrim(p_full_name)) < 2 then
     raise exception 'NAME_REQUIRED: caregiver name is required';
   end if;
@@ -267,6 +290,14 @@ declare
   v_hours integer;
   v_at timestamptz;
 begin
+  if p_schedule_complete is null or p_create_calls is null
+     or p_vaccinated_at is null or p_vaccine_type is null
+     or length(btrim(p_vaccine_type)) = 0 then
+    raise exception 'INVALID_VACCINATION: vaccination details are incomplete';
+  end if;
+  if p_create_calls and (p_language_code is null or p_language_code not in ('en', 'ha', 'kr')) then
+    raise exception 'INVALID_LANGUAGE: unsupported language code';
+  end if;
   if p_child_id is null or not exists (select 1 from public.children where id = p_child_id) then
     raise exception 'CHILD_NOT_FOUND: child does not exist';
   end if;
