@@ -512,7 +512,7 @@ app.post('/api/vaccinations', requireAuth, staff(...STAFF_ROLES), route(async (r
       p_next_dose_stage: isFinalDose ? null : stage[1], p_next_dose_due_at: isFinalDose ? null : lagosNoonIso(nextDoseDate),
       p_schedule_complete: isFinalDose, p_schedule_completed_at: isFinalDose ? now.toISOString() : null,
       p_recorded_by: req.profile.id, p_language_code: caregiver.preferred_language,
-      p_create_calls: Boolean(caregiver.phone && active), p_call_schedule: callSchedule(now.toISOString())
+      p_create_calls: Boolean(caregiver.phone && active)
     }));
   } catch (error) {
     const mapped = mapDbError(error);
