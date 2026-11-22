@@ -108,3 +108,33 @@ Read-only review of Elijah's frontend repository `elijahamosdogo-afk/Lafiya-line
 - Creating `integration/live-api-connection-2026-11` failed with GitHub HTTP 403: `Resource not accessible by integration`. No frontend file or branch was changed.
 - Next step: obtain GitHub write access for the connected integration, or have the frontend repository owner create/push the integration branch. Then implement authentication first, followed by bootstrap/data mapping and the enrolment flow.
 - No PR, frontend commit, merge, Render deployment, database migration, or outbound call was made as part of this review.
+
+
+## Integration execution checkpoint — 22 November 2026
+
+The project owner authorized autonomous professional execution of the integration workflow, subject to the established production and cost safeguards.
+
+### Access verification
+
+- Backend repository `james-codered/Lafiya-line-` is accessible with write permission through the connected GitHub integration.
+- Frontend repository `elijahamosdogo-afk/Lafiya-line-` was readable for its `main/index.html` source during prior audit, but is not currently listed among repositories writable/available through the connected GitHub integration. No frontend writes were attempted during this checkpoint.
+- The backend compatibility branch remains `fix/live-schema-compatibility-2026-11` at checkpoint commit `99c7e7d2e0c4dd679969e9f275e4a0e5d1449793` before this documentation update.
+
+### Next execution sequence
+
+1. Resolve frontend repository write access without bypassing GitHub permissions; use an owner-created integration branch if necessary.
+2. Create/confirm a non-production integration branch before frontend edits.
+3. Implement backend API client and login/session handling first; keep credentials and service-role secrets out of the browser and store tokens only in memory.
+4. Connect authenticated bootstrap and facility-scoped data, then enrolment (caregiver full name and confirmed DOB only; reported age must never imply DOB).
+5. Implement vaccination and callback workflows, error/loading states, and role-aware UI using backend authorization as the authority.
+6. Keep demo data isolated and clearly labelled; do not silently fall back to demo records on live API failure.
+7. Test only against a separately approved test environment once it is available; outbound calls remain disabled.
+
+### Safeguards still in force
+
+- No production database migration, data edits, or schema changes.
+- No paid Supabase branch activation until explicitly ready for its cost.
+- No Twilio outbound calls or audio activation.
+- No Render production deployment or merge to deployment-triggering branch.
+
+This checkpoint records planning and access status only; frontend source code has not been changed.
